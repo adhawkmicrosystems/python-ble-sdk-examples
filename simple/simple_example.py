@@ -1,18 +1,19 @@
 ''' Demonstrates how to subscribe to and handle data from gaze and event streams '''
 
+import argparse
+import logging
 import time
 
 import adhawkapi
-import adhawkapi.frontend
+import adhawkapi.frontend_ble
 
 
 class FrontendData:
     ''' BLE Frontend '''
 
-    def __init__(self):
+    def __init__(self, devname):
         # Instantiate an API object
-        # TODO: Update the device name to match your device
-        self._api = adhawkapi.frontend.FrontendApi(ble_device_name='ADHAWK MINDLINK-257')
+        self._api = adhawkapi.frontend_ble.FrontendApi(devname)
 
         # Tell the api that we wish to receive eye tracking data stream
         # with self._handle_et_data as the handler
@@ -21,6 +22,9 @@ class FrontendData:
         # Tell the api that we wish to tap into the EVENTS stream
         # with self._handle_events as the handler
         self._api.register_stream_handler(adhawkapi.PacketType.EVENTS, self._handle_events)
+
+        # Used to limit the rate at which data is displayed in the console
+        self._last_console_print = 0
 
         # Start the api and set its connection callback to self._handle_tracker_connect/disconnect.
         # When the api detects a connection to a MindLink, this function will be run.
@@ -31,9 +35,14 @@ class FrontendData:
         '''Shutdown the api and terminate the bluetooth connection'''
         self._api.shutdown()
 
-    @staticmethod
-    def _handle_et_data(et_data: adhawkapi.EyeTrackingStreamData):
+    def _handle_et_data(self, et_data: adhawkapi.EyeTrackingStreamData):
         ''' Handles the latest et data '''
+        # Only log at most once per second
+        if et_data.timestamp < self._last_console_print + 1:
+            return
+
+        self._last_console_print = et_data.timestamp
+
         if et_data.gaze is not None:
             xvec, yvec, zvec, vergence = et_data.gaze
             print(f'Gaze={xvec:.2f},y={yvec:.2f},z={zvec:.2f},vergence={vergence:.2f}')
@@ -82,16 +91,23 @@ class FrontendData:
 
     def _handle_tracker_disconnect(self):
         print("Tracker disconnected")
+        self._last_console_print = 0
 
 
 def main():
     ''' App entrypoint '''
-    frontend = FrontendData()
+    logging.basicConfig(level=logging.INFO, style='{', format='{levelname} [{filename}]: {message}')
+    parser = argparse.ArgumentParser(description='AdHawk BLE example')
+    parser.add_argument('devname', type=str)
+    args = parser.parse_args()
+
+    frontend = FrontendData(args.devname)
     try:
         while True:
             time.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         frontend.shutdown()
+
 
 if __name__ == '__main__':
     main()

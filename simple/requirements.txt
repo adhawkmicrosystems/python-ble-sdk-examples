@@ -1,1 +1,1 @@
-adhawk-ble
+adhawk-ble>=6.1
